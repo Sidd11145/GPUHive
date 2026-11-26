@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GridGPU device approvals</title>
+<style nonce="{{NONCE}}">body{font:16px system-ui;background:#f4f6fa;color:#18243a}main{max-width:900px;margin:5vh auto;padding:24px}input,button{font:inherit;padding:10px;margin:6px;border:1px solid #ccd4e4;border-radius:6px}input{width:60%}button{cursor:pointer}article{background:white;margin:14px 0;padding:16px;border-radius:10px}pre{white-space:pre-wrap;overflow-wrap:anywhere}#message{color:#8a241b}</style></head>
+<body><main><h1>Device approvals</h1><p>Review each device's verified email and reported hardware before approving it. Hardware anti-cheat is deferred.</p><p>Your admin secret is kept only in this page's memory.</p>
+<input id="secret" aria-label="Admin secret" type="password" autocomplete="off"><button id="load">Load pending devices</button><button id="devices">View all devices</button><button id="clear">Clear secret</button>
+<p id="message" role="status"></p><section id="list"></section>
+<script nonce="{{NONCE}}">
+const base=location.pathname.replace(/\/admin\/?$/,'/');
+async function api(path,method='GET') {
+  const response=await fetch(base+'admin/'+path,{method,headers:{Authorization:'Bearer '+document.getElementById('secret').value}});
+  const data=await response.json();
+  if(!response.ok) throw Error(data.error||'Request failed');
+  return data;
+}
+function message(error) {document.getElementById('message').textContent=error?error.message:'';}
+let pendingOnly=true;
+async function load() {
+  try {
+    message();
+    const devices=await api('devices'+(pendingOnly?'?status=pending_approval':''));
+    const list=document.getElementById('list');list.replaceChildren();
+    if(!devices.length) list.textContent=pendingOnly?'No devices awaiting approval.':'No devices registered.';
+    for(const device of devices) {
+      const card=document.createElement('article');
+      const title=document.createElement('h2');title.textContent=device.email;
+      const who=document.createElement('p');who.textContent='Name: '+(device.name||'(not given)')+' | Location: '+(device.location||'(not given)')+' | Availability: '+(device.availability||'(not given)');
+      const summary=document.createElement('p');summary.textContent='Status: '+device.status+' | Suggested tier: '+(device.suggestedTier||'unclassified');
+      const hardware=document.createElement('pre');hardware.textContent=JSON.stringify(device.hardware,null,2);
+      card.append(title,who,summary,hardware);
+      const actions=device.status==='pending_approval'?['approve','reject']:(device.status==='approved'?[device.enabled?'disable':'enable']:[]);
+      for(const action of actions) {
+        const button=document.createElement('button');button.textContent={approve:'Approve device',reject:'Reject device',disable:'Disable device',enable:'Enable device'}[action];
+        button.onclick=async()=>{button.disabled=true;try{await api('devices/'+device.deviceId+'/'+action,'POST');await load();}catch(error){message(error);button.disabled=false;}};
+        card.append(button);
+      }
+      list.append(card);
+    }
+  } catch(error) {message(error);}
+}
+document.getElementById('load').onclick=()=>{pendingOnly=true;load();};
+document.getElementById('devices').onclick=()=>{pendingOnly=false;load();};
+document.getElementById('clear').onclick=()=>{document.getElementById('secret').value='';document.getElementById('list').replaceChildren();message();};
+</script></main></body></html>

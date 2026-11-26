@@ -1,0 +1,9 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // The backend uses its managed service identity. No participant SDK access.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

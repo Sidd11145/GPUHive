@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gridgpu"
+version = "0.1.0"
+description = "Consumer GPU hardware detection and device registration"
+requires-python = ">=3.11"
+dependencies = ["requests>=2.31,<3", "psutil>=5.9,<8"]
+
+[project.optional-dependencies]
+test = ["pytest>=8,<10", "Flask>=3,<4"]
+
+[project.scripts]
+gridgpu = "gridgpu.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["gridgpu*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,4 @@
+{
+  "functions": [{"source": "functions", "codebase": "registration", "runtime": "python311"}],
+  "firestore": {"rules": "firestore.rules"}
+}
