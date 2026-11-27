@@ -22,8 +22,13 @@ def print_hardware(client):
 
 
 def main(argv=None):
+    # Double-clicking the app (no CLI arguments) opens the registration window.
+    if argv is None and len(sys.argv) == 1:
+        from gridgpu.gui import main as gui_main
+        return gui_main()
     parser = argparse.ArgumentParser(description="GridGPU device registration")
-    parser.add_argument("command", choices=["join", "setup", "inspect", "request", "status", "register", "run"])
+    parser.add_argument("--gui", action="store_true", help="Open the registration window")
+    parser.add_argument("command", nargs="?", choices=["join", "setup", "inspect", "request", "status", "register", "run"])
     parser.add_argument("--state-dir", type=Path, default=Path.home() / ".gridgpu")
     parser.add_argument("--api-url", help="Your GridGPU registration_api HTTPS function URL")
     parser.add_argument("--email", help="Email for a pending registration request")
@@ -33,6 +38,9 @@ def main(argv=None):
     parser.add_argument("--allow-local-http", action="store_true", help="Allow HTTP to a loopback development backend")
     parser.add_argument("--once", action="store_true", help="Check approval once; heartbeat only if approved")
     args = parser.parse_args(argv)
+    if args.gui or args.command is None:
+        from gridgpu.gui import main as gui_main
+        return gui_main(args.state_dir)
     try:
         client = DeviceClient(args.state_dir, args.api_url, args.allow_local_http)
         if args.command == "join":
