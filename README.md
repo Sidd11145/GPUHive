@@ -12,7 +12,17 @@ The contributor software runs on Windows/Linux GPU PCs. Firebase Cloud Functions
 
 Participants have no accounts/passwords and no Firestore permissions. Anti-cheat and job scheduling are future cycles. Device-reported GPU hardware is trusted for now; it is not a remote hardware proof. This cycle has no job execution API.
 
-## Install on a contributing PC
+## Install (no Python, no clone)
+
+Standalone installers bundle everything — contributors do **not** need Python or the source checkout. Download the installer for your OS from the [Releases page](https://github.com/Sidd11145/GPUHive/releases), then run it. After installing, run `gridgpu join` to share your GPU.
+
+- **Windows:** download `GPUHive-Setup-<version>.exe` and run it. The wizard installs GPUHive and adds a Start-Menu "Join GPUHive" shortcut. The binary is unsigned, so SmartScreen may warn — click **More info → Run anyway**.
+- **macOS:** download `GPUHive-<version>.pkg` and open it. The binary is unsigned/un-notarized, so Gatekeeper may block it — **right-click the .pkg → Open**, then confirm. Installs `gridgpu` to `/usr/local/bin`. (GitHub's macOS runner is Apple-silicon, so this is an arm64 build.)
+- **Linux:** download `gridgpu-<version>-linux-x86_64.tar.gz`, extract it, and run `./install-linux.sh` (copies `gridgpu` to `/usr/local/bin`, may prompt for sudo).
+
+These installers are produced automatically by `.github/workflows/build-installers.yml` when a `v*` tag is pushed (or via a manual workflow run). All GPU detection still shells out to host tools (`nvidia-smi`, `lspci`, `system_profiler`) that must already be present on the machine.
+
+## Install from source (developers)
 
 Python 3.11+ and internet access are required. These are Python setup scripts, not standalone Windows executables. Download or copy dist/gridgpu-device-installer.zip to the GPU computer, extract it, and open a terminal in the gridgpu-device folder.
 
