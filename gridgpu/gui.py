@@ -11,7 +11,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from pathlib import Path
 
-from gridgpu.registration.client import DeviceClient, RegistrationError
+from gridgpu.registration.client import DeviceClient
 
 # Optional: bake in your deployed registration_api URL here so users don't type it.
 # e.g. DEFAULT_API_URL = "https://europe-west1-yourproject.cloudfunctions.net/registration_api"
@@ -35,7 +35,6 @@ class RegistrationWindow:
         self.state_dir = Path(state_dir) if state_dir else Path.home() / ".gridgpu"
         self.client = None
         self.hardware = None
-        self._poll_stop = threading.Event()
         self._results = queue.Queue()
 
         self.root = tk.Tk()
@@ -124,111 +123,46 @@ class RegistrationWindow:
     def _on_register(self):
         url = self.vars["url"].get().strip()
         name = self.vars["name"].get().strip()
-        email = self.vars["email"].get().strip()
         if not url:
             messagebox.showwarning("Backend URL required", "Enter your GPUHive backend URL.")
             return
-        if not name or not email:
-            messagebox.showwarning("Missing details", "Name and email are required.")
+        if not name:
+            messagebox.showwarning("Missing details", "Name is required.")
             return
 
         self.register_btn.config(state="disabled")
-        self._set_status("Sending verification code to your email...")
+        self._set_status("Registering this GPU...")
 
-        def send():
+        def enroll():
             client = DeviceClient(self.state_dir, url)
-            client.request_registration(email, name,
-                                        self.vars["availability"].get().strip(),
-                                        self.vars["location"].get().strip())
+            client.enroll(name,
+                          self.vars["email"].get().strip(),
+                          self.vars["availability"].get().strip(),
+                          self.vars["location"].get().strip())
             return client
 
         def done(client, error):
             if error:
                 self.register_btn.config(state="normal")
-                self._set_status(f"Could not send code: {error}", "#c00")
+                self._set_status(f"Registration failed: {error}", "#c00")
                 return
             self.client = client
-            self._set_status(f"A 6-digit code was emailed to {email}.", "#060")
-            self._prompt_for_code()
+            self._set_status("Registered! This GPU is active and sending heartbeats. "
+                             "Keep this window open while sharing.", "#060")
+            self._start_heartbeat()
 
-        self._run_async(send, done)
+        self._run_async(enroll, done)
 
-    def _prompt_for_code(self):
-        win = tk.Toplevel(self.root)
-        win.title("Enter verification code")
-        win.geometry("360x180")
-        win.transient(self.root)
-        win.grab_set()
-        ttk.Label(win, text="Enter the 6-digit code from your email:",
-                  padding=12).pack(anchor="w")
-        code_var = tk.StringVar()
-        ttk.Entry(win, textvariable=code_var, width=16, font=("", 14)).pack(pady=6)
-        msg = ttk.Label(win, text="", wraplength=320)
-        msg.pack()
-
-        def submit():
-            code = code_var.get().strip()
-            if not code:
-                msg.config(text="Enter the code.", foreground="#c00")
-                return
-            msg.config(text="Submitting device...", foreground="#06c")
-
-            def do_register():
-                return self.client.register(code)
-
-            def done(result, error):
-                if error:
-                    msg.config(text=f"{error}", foreground="#c00")
-                    return
-                win.destroy()
-                self._set_status(
-                    f"Device submitted (status: {result['status']}). "
-                    "Waiting for the owner to approve it...", "#060")
-                self._start_polling()
-
-            self._run_async(do_register, done)
-
-        ttk.Button(win, text="Submit", command=submit).pack(pady=10)
-
-    def _start_polling(self):
-        def poll_loop():
-            import time
-            import random
-            while not self._poll_stop.is_set():
-                try:
-                    value = self.client.poll_approval()
-                    status = value["status"]
-                    if status == "approved":
-                        self._results.put((self._on_approved, None, None))
-                        return
-                    if status == "rejected":
-                        self._results.put((self._on_rejected, None, None))
-                        return
-                    interval = self.client.state.get("approvalPollIntervalSeconds", 30)
-                except RegistrationError as error:
-                    if error.status in (400, 401, 403, 404, 409):
-                        self._results.put((self._on_poll_error, None, error))
-                        return
-                    interval = self.client.state.get("approvalPollIntervalSeconds", 30)
-                time.sleep(max(2, interval) * random.uniform(0.85, 1.15))
-
-        threading.Thread(target=poll_loop, daemon=True).start()
-
-    def _on_approved(self, _value, _error):
-        self._set_status("Approved! This GPU is now registered. You can close this window.", "#060")
-        messagebox.showinfo("Approved", "Your GPU was approved and registered. Thank you!")
-
-    def _on_rejected(self, _value, _error):
-        self._set_status("The owner rejected this device.", "#c00")
-
-    def _on_poll_error(self, _value, error):
-        self._set_status(f"Stopped waiting: {error}", "#c00")
+    def _start_heartbeat(self):
+        def loop():
+            try:
+                self.client.run()
+            except Exception:
+                pass
+        threading.Thread(target=loop, daemon=True).start()
 
     def run(self):
-        try:
-            self.root.mainloop()
-        finally:
-            self._poll_stop.set()
+        self.root.mainloop()
 
 
 def main(state_dir=None):

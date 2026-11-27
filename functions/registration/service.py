@@ -195,6 +195,43 @@ class RegistrationService:
         return {"deviceId": device_id, "status": device["status"],
                 "approvalPollIntervalSeconds": self.settings.approval_poll_interval_seconds}
 
+    def enroll_direct(self, name, email, availability, location, device_id, nonce, hardware):
+        # Simple no-OTP, no-approval path: create the device already approved and
+        # enabled, returning its credential so it can heartbeat immediately.
+        name = text(name, "name", 120).strip()
+        email = optional_text(email, "email", 254)
+        if email and not re.fullmatch(r"[^\s@<>]{1,64}@[^\s@<>]+\.[^\s@<>]+", email):
+            raise ApiError(400, "Enter a valid email address")
+        availability = optional_text(availability, "availability", 200)
+        location = optional_text(location, "location", 120)
+        device_id, nonce = self._id(device_id), self._nonce(nonce)
+        hardware = validate_hardware(hardware)
+        nonce_hash, now = hash_secret(nonce), self.clock()
+        salt = secrets.token_urlsafe(32)
+        def enroll(tx):
+            existing = tx.get("devices", device_id)
+            if existing is not None:
+                if hmac.compare_digest(existing["registrationNonceHash"], nonce_hash):
+                    return existing
+                raise ApiError(409, "Device ID is already registered")
+            device = {
+                "email": email, "emailVerifiedAt": None,
+                "name": name, "availability": availability, "location": location,
+                "hardware": hardware, "suggestedTier": self.settings.tier(hardware),
+                "hardwareVerification": "self_reported", "speedScore": None,
+                "status": "approved", "registrationNonceHash": nonce_hash,
+                "credentialHash": None, "credentialSalt": salt, "enabled": True,
+                "registeredAt": now, "reviewedAt": now, "lastSeenAt": None, "telemetry": {},
+            }
+            device["credentialHash"] = hash_secret(self._credential(device_id, device))
+            tx.set("devices", device_id, device)
+            return device
+        device = self.store.transaction(enroll)
+        credential = self._credential(device_id, device)
+        return {"deviceId": device_id, "status": device["status"],
+                "credential": credential,
+                "heartbeatIntervalSeconds": self.settings.heartbeat_interval_seconds}
+
     def _credential(self, device_id, device):
         message = json.dumps(["gridgpu-device-v2", device_id, device["registrationNonceHash"],
                               device["credentialSalt"]], separators=(",", ":")).encode()

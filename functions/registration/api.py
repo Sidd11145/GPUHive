@@ -110,6 +110,13 @@ def create_app(service, admin_secret):
         data = body(["token", "deviceId", "registrationNonce", "hardware"])
         return response(service.register(data["token"], data["deviceId"], data["registrationNonce"], data["hardware"]), 201)
 
+    @app.post("/devices/enroll")
+    def enroll():
+        data = body(["name", "email", "availability", "location", "deviceId", "registrationNonce", "hardware"])
+        return response(service.enroll_direct(
+            data["name"], data["email"], data["availability"], data["location"],
+            data["deviceId"], data["registrationNonce"], data["hardware"]), 201)
+
     @app.get("/devices/<device_id>/approval")
     def approval_status(device_id):
         return response(service.approval_status(device_id, bearer()))

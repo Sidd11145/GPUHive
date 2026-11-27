@@ -93,6 +93,27 @@ class DeviceClient:
         self.save()
         return value
 
+    def enroll(self, name, email="", availability="", location=""):
+        # Simple no-OTP path: submit once, receive a credential, start heartbeats.
+        if self.state.get("credential") or self.state.get("registrationStatus"):
+            return {"deviceId": self.state["deviceId"],
+                    "status": self.state.get("registrationStatus", "approved")}
+        value = self.call("/devices/enroll", data={
+            "name": name, "email": email, "availability": availability, "location": location,
+            "deviceId": self.state["deviceId"], "registrationNonce": self.state["registrationNonce"],
+            "hardware": self.inspect(),
+        })
+        if value.get("deviceId") != self.state["deviceId"] or value.get("status") != "approved":
+            raise RegistrationError("Backend returned an invalid enrollment response")
+        credential = value.get("credential")
+        if not isinstance(credential, str) or not 32 <= len(credential) <= 256:
+            raise RegistrationError("Backend returned invalid device credentials")
+        heartbeat_interval = self._interval(value.get("heartbeatIntervalSeconds"), 10, 3600)
+        self.state.update(registrationStatus="approved", credential=credential,
+                          heartbeatIntervalSeconds=heartbeat_interval)
+        self.save()
+        return {"deviceId": value["deviceId"], "status": value["status"]}
+
     def register(self, token):
         if self.state.get("registrationStatus") or self.state.get("credential"):
             return {"deviceId": self.state["deviceId"],
